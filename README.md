@@ -2,8 +2,6 @@
 
 Welcome to the **Pixel Sorting Web App**! This project is a pixel sorting tool built using [Next.js](https://nextjs.org/), [Radix UI](https://www.radix-ui.com/), and hosted on [Vercel](https://vercel.com/). 
 
-![App Screenshot](path/to/your/screenshot.png)
-
 ## Features
 
 - **Pixel Sorting:** Easily upload and sort pixels in your images.
