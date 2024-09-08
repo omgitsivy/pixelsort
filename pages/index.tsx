@@ -1,115 +1,380 @@
-import Image from "next/image";
-import localFont from "next/font/local";
+import { useState, useRef, useCallback, useEffect } from 'react';
+import Head from 'next/head';
+import Image from 'next/image';
+import { useTheme } from 'next-themes'
+import { Container, Flex, Text, Button, Slider, Select, Card, Box, Grid, Progress, Tooltip } from '@radix-ui/themes';
+import { UploadIcon, ResetIcon, PlayIcon, SunIcon, MoonIcon, DownloadIcon, ArrowLeftIcon, ArrowRightIcon } from '@radix-ui/react-icons';
+import { pixelSort } from '../utils/pixelSorting';
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
+type HistoryEntry = {
+  intensity: number;
+  chunkSize: number;
+  direction: 'horizontal' | 'vertical';
+  sortAlgorithm: string;
+  excludeAlgorithm: string;
+};
 
 export default function Home() {
-  return (
-    <div
-      className={`${geistSans.variable} ${geistMono.variable} grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]`}
-    >
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              pages/index.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const { theme, setTheme } = useTheme()
+  const [image, setImage] = useState<File | null>(null);
+  const [processedImage, setProcessedImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [intensity, setIntensity] = useState(50);
+  const [chunkSize, setChunkSize] = useState(10);
+  const [direction, setDirection] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [sortAlgorithm, setSortAlgorithm] = useState('lightness');
+  const [excludeAlgorithm, setExcludeAlgorithm] = useState('lightness_threshold');
+  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=default-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setImage(event.target.files[0]);
+      setProcessedImage(null);
+      setPreviewImage(null);
+      resetHistory();
+    }
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer.files && event.dataTransfer.files[0]) {
+      setImage(event.dataTransfer.files[0]);
+      setProcessedImage(null);
+      setPreviewImage(null);
+      resetHistory();
+    }
+  };
+
+  const handleReset = () => {
+    setImage(null);
+    setProcessedImage(null);
+    setPreviewImage(null);
+    setIntensity(50);
+    setChunkSize(10);
+    setDirection('horizontal');
+    setSortAlgorithm('lightness');
+    setExcludeAlgorithm('lightness_threshold');
+    resetHistory();
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const resetHistory = () => {
+    setHistory([]);
+    setHistoryIndex(-1);
+  };
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const prevEntry = history[historyIndex - 1];
+      setIntensity(prevEntry.intensity);
+      setChunkSize(prevEntry.chunkSize);
+      setDirection(prevEntry.direction);
+      setSortAlgorithm(prevEntry.sortAlgorithm);
+      setExcludeAlgorithm(prevEntry.excludeAlgorithm);
+      setHistoryIndex(historyIndex - 1);
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextEntry = history[historyIndex + 1];
+      setIntensity(nextEntry.intensity);
+      setChunkSize(nextEntry.chunkSize);
+      setDirection(nextEntry.direction);
+      setSortAlgorithm(nextEntry.sortAlgorithm);
+      setExcludeAlgorithm(nextEntry.excludeAlgorithm);
+      setHistoryIndex(historyIndex + 1);
+    }
+  };
+
+  const processImage = useCallback((preview: boolean = false) => {
+    if (!image) return;
+
+    const canvas = preview ? previewCanvasRef.current : canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    setLoading(true);
+
+    const img = new window.Image();
+    img.onload = () => {
+      const aspectRatio = img.width / img.height;
+      const maxWidth = preview ? 300 : img.width;
+      const maxHeight = preview ? 300 : img.height;
+
+      let newWidth = maxWidth;
+      let newHeight = maxWidth / aspectRatio;
+
+      if (newHeight > maxHeight) {
+        newHeight = maxHeight;
+        newWidth = maxHeight * aspectRatio;
+      }
+
+      canvas.width = newWidth;
+      canvas.height = newHeight;
+      ctx.drawImage(img, 0, 0, newWidth, newHeight);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const sortedImageData = pixelSort(
+        imageData,
+        sortAlgorithm,
+        excludeAlgorithm,
+        intensity / 100,
+        chunkSize,
+        direction
+      );
+
+      ctx.putImageData(sortedImageData, 0, 0);
+      const dataUrl = canvas.toDataURL();
+      if (preview) {
+        setPreviewImage(dataUrl);
+      } else {
+        setProcessedImage(dataUrl);
+        const newEntry: HistoryEntry = {
+          intensity,
+          chunkSize,
+          direction,
+          sortAlgorithm,
+          excludeAlgorithm,
+        };
+        setHistory(prevHistory => [...prevHistory.slice(0, historyIndex + 1), newEntry]);
+        setHistoryIndex(prevIndex => prevIndex + 1);
+      }
+      setLoading(false);
+    };
+    img.src = URL.createObjectURL(image);
+  }, [image, intensity, chunkSize, sortAlgorithm, excludeAlgorithm, direction, historyIndex]);
+
+  useEffect(() => {
+    if (image) {
+      const debounce = setTimeout(() => {
+        processImage(true);
+      }, 300);
+      return () => clearTimeout(debounce);
+    }
+  }, [image, intensity, chunkSize, sortAlgorithm, excludeAlgorithm, direction, processImage]);
+  
+  const downloadImage = (format: 'png' | 'jpeg') => {
+    if (processedImage) {
+      const link = document.createElement('a');
+      link.href = processedImage;
+      link.download = `processed_image.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  return (
+    <>
+      <Head>
+        <title>Pixel Sorter</title>
+        <meta name="description" content="Image pixel sorting application" />
+        <link rel="icon" href="/favicon.ico" />
+      </Head>
+
+      <Container size="4">
+        <Flex justify="between" align="center" mb="6">
+          <Text size="8" weight="bold">Pixel Sorter</Text>
+          <Button variant="ghost" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+          </Button>
+        </Flex>
+
+        <Grid columns={{ initial: '1', md: '2' }} gap="6">
+          <Box>
+            <Card mb="4">
+              <Flex align="center" gap="4" wrap="wrap">
+                <Box style={{ flexGrow: 1 }}>
+                  <Text as="label" size="2" htmlFor="upload-input">
+                    Choose an image to sort
+                  </Text>
+                  <input
+                    id="upload-input"
+                    type="file"
+                    onChange={handleUpload}
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    ref={fileInputRef}
+                  />
+                </Box>
+                <Tooltip content="Upload an image">
+                  <Button onClick={() => fileInputRef.current?.click()}>
+                    <UploadIcon /> Upload Image
+                  </Button>
+                </Tooltip>
+                <Tooltip content="Reset all settings">
+                  <Button variant="soft" onClick={handleReset}>
+                    <ResetIcon /> Reset
+                  </Button>
+                </Tooltip>
+              </Flex>
+            </Card>
+
+            <Card>
+              <Flex direction="column" gap="4">
+                <Text as="label" size="3" weight="bold">
+                  Sorting Options
+                </Text>
+                <Flex direction="column" gap="3">
+                  <Tooltip content="Adjust the strength of the sorting effect">
+                    <Text as="label" size="2">
+                      Intensity: {intensity}%
+                    </Text>
+                  </Tooltip>
+                  <Slider
+                    value={[intensity]}
+                    onValueChange={(value) => setIntensity(value[0])}
+                    min={0}
+                    max={100}
+                    step={1}
+                  />
+                </Flex>
+                <Flex direction="column" gap="3">
+                  <Tooltip content="Set the size of sorted chunks">
+                    <Text as="label" size="2">
+                      Chunk Size: {chunkSize}%
+                    </Text>
+                  </Tooltip>
+                  <Slider
+                    value={[chunkSize]}
+                    onValueChange={(value) => setChunkSize(value[0])}
+                    min={1}
+                    max={100}
+                    step={1}
+                  />
+                </Flex>
+                <Flex direction="column" gap="3">
+                  <Tooltip content="Choose sorting direction">
+                    <Text as="label" size="2">
+                      Direction
+                    </Text>
+                  </Tooltip>
+                  <Select.Root value={direction} onValueChange={(value: 'horizontal' | 'vertical') => setDirection(value)}>
+                    <Select.Trigger />
+                    <Select.Content>
+                      <Select.Item value="horizontal">Horizontal</Select.Item>
+                      <Select.Item value="vertical">Vertical</Select.Item>
+                    </Select.Content>
+                  </Select.Root>
+                </Flex>
+                <Flex direction="column" gap="3">
+                  <Tooltip content="Select the algorithm for sorting pixels">
+                    <Text as="label" size="2">
+                      Sort Algorithm
+                    </Text>
+                  </Tooltip>
+                  <Select.Root value={sortAlgorithm} onValueChange={setSortAlgorithm}>
+                    <Select.Trigger />
+                    <Select.Content>
+                      <Select.Item value="lightness">Lightness</Select.Item>
+                      <Select.Item value="saturation">Saturation</Select.Item>
+                      <Select.Item value="hue">Hue</Select.Item>
+                    </Select.Content>
+                  </Select.Root>
+                </Flex>
+                <Flex direction="column" gap="3">
+                  <Tooltip content="Choose how to exclude pixels from sorting">
+                    <Text as="label" size="2">
+                      Exclude Algorithm
+                    </Text>
+                  </Tooltip>
+                  <Select.Root value={excludeAlgorithm} onValueChange={setExcludeAlgorithm}>
+                    <Select.Trigger />
+                    <Select.Content>
+                      <Select.Item value="lightness_threshold">Lightness Threshold</Select.Item>
+                      <Select.Item value="saturation_threshold">Saturation Threshold</Select.Item>
+                      <Select.Item value="hue_threshold">Hue Threshold</Select.Item>
+                      <Select.Item value="random_exclude">Random Exclude</Select.Item>
+                    </Select.Content>
+                  </Select.Root>
+                </Flex>
+                <Flex gap="2">
+                  <Tooltip content="Apply settings to full image">
+                    <Button onClick={() => processImage(false)} disabled={!image}>
+                      <PlayIcon /> Apply to Full Image
+                    </Button>
+                  </Tooltip>
+                  <Tooltip content="Undo last change">
+                    <Button variant="soft" onClick={undo} disabled={historyIndex <= 0}>
+                      <ArrowLeftIcon />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip content="Redo last undone change">
+                    <Button variant="soft" onClick={redo} disabled={historyIndex >= history.length - 1}>
+                      <ArrowRightIcon />
+                    </Button>
+                  </Tooltip>
+                </Flex>
+                {processedImage && (
+                  <Flex gap="2">
+                    <Tooltip content="Download as PNG">
+                      <Button variant="soft" onClick={() => downloadImage('png')}>
+                        <DownloadIcon /> PNG
+                      </Button>
+                    </Tooltip>
+                    <Tooltip content="Download as JPEG">
+                      <Button variant="soft" onClick={() => downloadImage('jpeg')}>
+                        <DownloadIcon /> JPEG
+                      </Button>
+                    </Tooltip>
+                  </Flex>
+                )}
+              </Flex>
+            </Card>
+          </Box>
+
+          <Box>
+            <Card>
+              <Text as="p" size="3" weight="bold" mb="2">
+                {processedImage ? 'Processed Image' : (previewImage ? 'Preview' : 'Original Image')}
+              </Text>
+              <Box
+                style={{ maxWidth: '100%', overflow: 'hidden' }}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
+                {loading && <Progress />}
+                {(image || processedImage || previewImage) ? (
+                  <Image
+                    src={processedImage || previewImage || (image ? URL.createObjectURL(image) : '')}
+                    alt={processedImage ? 'Processed Image' : (previewImage ? 'Preview' : 'Original Image')}
+                    width={500}
+                    height={300}
+                    layout="responsive"
+                    objectFit="contain"
+                  />
+                ) : (
+                  <Flex
+                    align="center"
+                    justify="center"
+                    style={{ height: '300px', border: '2px dashed var(--gray-6)', borderRadius: 'var(--radius-2)' }}
+                  >
+                    <Text>Drag and drop an image here or use the upload button</Text>
+                  </Flex>
+                )}
+              </Box>
+            </Card>
+          </Box>
+        </Grid>
+        </Container>
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <canvas ref={previewCanvasRef} style={{ display: 'none' }} />
+    </>
   );
 }
