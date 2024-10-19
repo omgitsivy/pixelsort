@@ -23,7 +23,7 @@ You can use the website [Here](https://pixelsort.vercel.app/)
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/pixel-sorting-webapp.git
+   git clone https://github.com/omgitsivy/pixelsort
    cd pixel-sorting-webapp
    ``` 
 2. **Install dependencies:**
